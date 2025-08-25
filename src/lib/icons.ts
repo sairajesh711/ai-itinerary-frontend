@@ -1,4 +1,4 @@
-import type { Category, TravelMode } from './types'
+import type { Category } from './types'
 
 export function iconForCategory(cat?: Category) {
   switch (cat) {

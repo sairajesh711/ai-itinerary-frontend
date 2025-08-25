@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { DayPlan } from '$lib/types'
-  import ActivityCard from './ActivityCard.svelte'
+  import ActivityCard from './itinerary/ActivityCard.svelte'
   import TravelConnector from './TravelConnector.svelte'
 
   export let day: DayPlan
