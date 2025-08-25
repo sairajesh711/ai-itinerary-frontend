@@ -1,87 +1,91 @@
 <script lang="ts">
-  import type { ItineraryResponse, DayPlan } from '$lib/types'
-  import DaySection from '$lib/components/DaySection.svelte'
-  import MapView from '$lib/components/MapView.svelte'
-  import ViewToggle from '$lib/components/ViewToggle.svelte'
+  import { fade } from 'svelte/transition';
+  import LoadingAnimation from '$lib/components/LoadingAnimation.svelte';
+  import { resolveArtwork } from '$lib/artwork';
 
-  // TEMP: sample. Replace with a real fetch to your backend.
-  const sample: ItineraryResponse = {
-    destination: 'Lisbon',
-    start_date: '2025-10-05',
-    end_date: '2025-10-06',
-    total_days: 2,
-    timezone: 'Europe/Lisbon',
-    currency: 'EUR',
-    travelers_count: 1,
-    interests: ['nightlife'],
-    daily_plan: [
-      {
-        day_index: 1,
-        date: '2025-10-05',
-        summary: 'Exploring Lisbon’s neighborhoods and nightlife.',
-        weather: null,
-        activities: [
-          {
-            title: 'Belém Tower',
-            category: 'landmark',
-            start_time: '09:00:00',
-            end_time: '10:30:00',
-            place: {
-              name: 'Belém Tower',
-              coordinates: { lat: 38.6915, lng: -9.2159 },
-            },
-            estimated_cost: { currency:'EUR', amount_min:6, amount_max:10 },
-            travel_from_prev: null,
-            tags: ['historic']
-          },
-          {
-            title: 'Pastéis de Belém (Lunch)',
-            category: 'food',
-            start_time: '11:00:00',
-            end_time: '12:30:00',
-            place: { name: 'Pastéis de Belém', coordinates: { lat: 38.6972, lng: -9.2035 } },
-            estimated_cost: { currency:'EUR', amount_min:5, amount_max:15 },
-            travel_from_prev: { mode:'walk', duration_minutes:15, distance_km:1 }
-          },
-          {
-            title: 'Bairro Alto Nightlife',
-            category: 'nightlife',
-            start_time: '20:00:00',
-            end_time: '23:00:00',
-            place: { name: 'Bairro Alto', coordinates: { lat: 38.7139, lng: -9.1449 } },
-            estimated_cost: { currency:'EUR', amount_min:20, amount_max:40 },
-            travel_from_prev: { mode:'public_transit', duration_minutes:20, distance_km:3 }
-          }
-        ],
-        notes: ['Budget summary: EUR 31–65 vs cap EUR 100 — UNDER.']
-      }
-    ],
-    logistics: null,
-    meta: { schema_version: '1.0.0', generator: 'ui-prototype' }
+  let destination = '';
+  let loading = false;
+
+  // Resolve background art from the typed destination
+  $: art = resolveArtwork(destination);
+
+  async function onSubmit(e: Event) {
+    e.preventDefault();
+    loading = true;
+    try {
+      // TODO: call your backend here
+      await new Promise((r) => setTimeout(r, 2600));
+    } finally {
+      loading = false;
+    }
   }
-
-  let mode: 'timeline' | 'map' = 'timeline'
-  const day: DayPlan = sample.daily_plan[0]
-  function setMode(m:'timeline'|'map'){ mode = m }
 </script>
 
-<div class="mx-auto max-w-3xl px-4 py-6 sm:py-10">
-  <header class="mb-6 sm:mb-8">
-    <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight">
-      {sample.destination} • {sample.start_date} → {sample.end_date}
-    </h1>
-    <p class="text-sm text-[var(--muted)] mt-1">
-      {sample.total_days} day itinerary • {sample.currency}
-    </p>
-  </header>
+<!-- HERO artwork (anchored right). 
+     We wrap in {#key} so Svelte crossfades when art.src changes. -->
+{#key art.src}
+  <img
+    src={art.src}
+    alt=""
+    class="pointer-events-none select-none fixed top-1/2 -translate-y-1/2 z-0 h-[78vh] md:h-[90vh] w-auto object-contain"
+    style="right: calc(0vw + {art.nudgeVw ?? 0}vw); opacity: {art.opacity ?? 0.14}; filter: grayscale(100%) contrast(92%);"
+    in:fade={{ duration: 300 }}
+    out:fade={{ duration: 200 }}
+  />
+{/key}
 
-  <div class="mb-4">
-    <ViewToggle {mode} {setMode} />
+<!-- Readability wash over the left content column -->
+<div class="bg-wash"></div>
+
+<main class="container-pro relative z-10 lg:pr-[30vw]">
+  <div class="mb-8 text-center lg:text-left">
+    <h1 class="font-heading text-4xl sm:text-5xl font-semibold tracking-tight">AI Travel Planner</h1>
+    <p class="mt-2 text-sm text-slate-500">Minimal • matte • slick</p>
   </div>
 
-  {#if mode === 'timeline'}
-    <DaySection {day} />
-  {:else}
-    <MapView {day} />
-  {/if}
-</div>
+  <form class="card p-6 max-w-xl" on:submit|preventDefault={onSubmit}>
+    <label class="block text-sm font-medium mb-2" for="dest">Where are you going?</label>
+    <input
+      id="dest"
+      class="w-full rounded-2xl border border-slate-300 bg-stone-100 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 text-base"
+      type="text"
+      placeholder="e.g., Paris, Durban, Kyoto"
+      bind:value={destination}
+      autocomplete="off"
+      spellcheck="false"
+    />
+
+    <div class="mt-4 flex items-center justify-between">
+      <p class="text-xs text-slate-500">The background sketch adapts as you type.</p>
+      <button type="submit" class="btn btn-primary">Get started</button>
+    </div>
+  </form>
+
+  <section class="mt-8 space-y-4">
+    <div class="card p-6">
+      <h2 class="font-heading text-xl sm:text-2xl font-semibold mb-2">Daily Timeline</h2>
+      <p class="text-sm text-slate-500">Your generated day-by-day plan will appear here.</p>
+    </div>
+    <div class="card p-6">
+      <h2 class="font-heading text-xl sm:text-2xl font-semibold mb-2">Map View</h2>
+      <p class="text-sm text-slate-500">We’ll render an interactive map for each day’s activities.</p>
+    </div>
+  </section>
+</main>
+
+<!-- Loading overlay, faded in/out -->
+{#if loading}
+  <div class="fixed inset-0 z-50" in:fade={{ duration: 150 }} out:fade={{ duration: 150 }}>
+    <LoadingAnimation
+      visible={true}
+      steps={[
+        'Consulting the atlas…',
+        'Checking local events…',
+        'Sketching your route…',
+        'Balancing your budget…',
+        'Estimating travel times…'
+      ]}
+      intervalMs={1100}
+    />
+  </div>
+{/if}

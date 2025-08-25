@@ -1,34 +1,44 @@
+/* src/app.css */
 @import "tailwindcss";
 
-/* Light, minimalist theme */
-@layer base {
-  :root {
-    --surface: #ffffff;
-    --border: #e7e5e4; /* stone-200 */
-    --muted: #64748b;  /* slate-500 */
-    --ring:  #cbd5e1;  /* slate-300 */
-    --accent: #334155; /* slate-700 */
-    --accent-hover: #1f2937; /* gray-800 */
-  }
-
-  html, body { height: 100%; }
+/* ---- Design tokens (CSS vars so we avoid tailwind.config) ---- */
+:root {
+  --bg: #FAF9F6;       /* warm off-white */
+  --fg: #111827;       /* slate-900 */
+  --muted: #64748B;    /* slate-500 */
+  --ring: #CBD5E1;     /* slate-300 */
 }
 
-@layer components {
-  .card {
-    @apply rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-sm;
-  }
-  .btn {
-    @apply inline-flex items-center gap-2 rounded-xl px-4 py-2 font-medium;
-  }
-  .btn-primary {
-    background: var(--accent);
-    color: white;
-  }
-  .btn-primary:hover {
-    background: var(--accent-hover);
-  }
-  .chip {
-    @apply rounded-full border border-[var(--ring)] px-2.5 py-0.5 text-xs;
-  }
+/* ---- Global base ---- */
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji",
+               "Segoe UI Emoji","Segoe UI Symbol";
+}
+
+/* ---- Helpers & tiny component classes (kept minimal) ---- */
+.font-heading { font-family: Roboto, Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial; }
+.container-pro { @apply max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8; }
+
+.card {
+  @apply bg-white border rounded-2xl;
+  border-color: color-mix(in srgb, var(--ring) 70%, transparent);
+  box-shadow: 0 10px 30px rgba(16,24,40,.06);
+}
+
+.btn { @apply inline-flex items-center gap-2 rounded-full px-4 py-2 font-semibold select-none; }
+.btn-primary { @apply text-white; background:#1f2a37; }
+.btn-primary:hover { background:#111827; }
+
+/* gradient wash on the left for readability over the hero image */
+.bg-wash {
+  @apply fixed inset-0 -z-10 pointer-events-none;
+  background: linear-gradient(90deg,
+    var(--bg) 0%,
+    color-mix(in srgb, var(--bg) 70%, transparent) 35%,
+    transparent 60%);
 }
