@@ -1,10 +1,14 @@
 // src/lib/api.ts
 import type { ItineraryRequest, ItineraryResponse } from './types';
 
-const BASE_URL =
-  (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://127.0.0.1:8000';
+export type JobState = 'idle' | 'queued' | 'running' | 'done' | 'error';
 
-function withTimeout<T>(p: Promise<T>, ms: number, label = 'Request') {
+const API_BASE =
+  import.meta.env.VITE_API_BASE?.toString().replace(/\/$/, '') || 'http://127.0.0.1:8000';
+
+const DEFAULT_HEADERS = { 'Content-Type': 'application/json' };
+
+async function withTimeout<T>(p: Promise<T>, ms: number, label = 'request'): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
     p.then((v) => {
@@ -17,81 +21,104 @@ function withTimeout<T>(p: Promise<T>, ms: number, label = 'Request') {
   });
 }
 
-// POST to create a job
-export async function postItinerary(payload: ItineraryRequest): Promise<{ job_id: string }> {
-  const url = `${BASE_URL}/jobs/itinerary`;
-  const res = await withTimeout(
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }),
-    20_000,
-    'Create job'
-  );
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Create job failed (${res.status}): ${text}`);
-  }
-  return res.json();
-}
-
-// GET job status
-export async function fetchJob(jobId: string): Promise<any> {
-  const url = `${BASE_URL}/jobs/${jobId}`;
-  const res = await withTimeout(fetch(url, { method: 'GET' }), 15_000, 'Poll job');
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Poll failed (${res.status}): ${text}`);
-  }
-  return res.json();
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 /**
- * Wait for job completion with calm backoff and progress streaming.
- * - Starts at ~1.8s, backs off gently up to 5s.
- * - Calls onSteps() when the server sends new step messages.
- * - Uses a deadline to avoid infinite waits.
+ * Create an itinerary job and poll until it's completed.
+ * Returns the final ItineraryResponse.
+ *
+ * The backend is expected to expose:
+ *  - POST  /jobs/itinerary -> { job_id: string }
+ *  - GET   /jobs/:id       -> { status: 'queued'|'running'|'completed'|'failed', result?: ItineraryResponse, error?: string }
+ *
+ * We’re resilient to slight shape differences: 'result'|'data'|'itinerary'.
  */
-export async function waitForJob<T = ItineraryResponse>(
-  jobId: string,
-  opts: {
-    onSteps?: (msgs: string[]) => void;
-    startIntervalMs?: number; // default 1800
-    maxIntervalMs?: number; // default 5000
-    deadlineMs?: number; // default 6 min
-  } = {}
-): Promise<T> {
-  const seenSeq = new Set<number>();
-  const startInterval = opts.startIntervalMs ?? 1800;
-  const maxInterval = opts.maxIntervalMs ?? 5000;
-  const deadline = Date.now() + (opts.deadlineMs ?? 6 * 60_000);
+export async function postItinerary(
+  payload: ItineraryRequest,
+  onStatus?: (s: JobState) => void
+): Promise<ItineraryResponse> {
+  onStatus?.('queued');
 
-  let interval = startInterval;
+  // 1) Create job
+  const createRes = await withTimeout(
+    fetch(`${API_BASE}/jobs/itinerary`, {
+      method: 'POST',
+      headers: DEFAULT_HEADERS,
+      body: JSON.stringify(payload)
+    }),
+    15000,
+    'create itinerary job'
+  );
 
-  // first immediate fetch so UI updates quickly
+  if (!createRes.ok) {
+    const text = await createRes.text().catch(() => '');
+    throw new Error(`Job create failed (${createRes.status}): ${text}`);
+  }
+  const createJson = (await createRes.json()) as { job_id?: string; id?: string };
+  const jobId = createJson.job_id || createJson.id;
+  if (!jobId) throw new Error('Job create succeeded but no job_id was returned');
+
+  // 2) Poll
+  let lastEmitted: JobState = 'queued';
+  const POLL_MS = 1400;             // smooth pacing for the loader
+  const MAX_WAIT_MS = 120000;       // hard cap 2 minutes (adjust as needed)
+  const started = Date.now();
+
+  // helper to map backend status to JobState
+  const mapStatus = (s: string): JobState => {
+    if (s === 'completed') return 'done';
+    if (s === 'failed') return 'error';
+    if (s === 'running' || s === 'processing') return 'running';
+    return 'queued';
+  };
+
   while (true) {
-    const status = await fetchJob(jobId);
-
-    // server shape assumed:
-    // { status: "pending"|"running"|"done"|"error", steps: [{seq, msg, ts?}], result?, error? }
-    const newMsgs: string[] = [];
-    const steps = Array.isArray(status?.steps) ? status.steps : [];
-    for (const step of steps) {
-      if (typeof step?.seq === 'number' && !seenSeq.has(step.seq)) {
-        seenSeq.add(step.seq);
-        if (typeof step?.msg === 'string' && step.msg.trim()) newMsgs.push(step.msg.trim());
-      }
+    if (Date.now() - started > MAX_WAIT_MS) {
+      onStatus?.('error');
+      throw new Error('Job timed out while polling');
     }
-    if (newMsgs.length && opts.onSteps) opts.onSteps(newMsgs);
 
-    if (status?.status === 'done') return status.result as T;
-    if (status?.status === 'error') throw new Error(status?.error || 'Job failed');
+    const stRes = await withTimeout(
+      fetch(`${API_BASE}/jobs/${jobId}`, { method: 'GET' }),
+      10000,
+      'poll itinerary job'
+    );
 
-    if (Date.now() > deadline) throw new Error('Timed out waiting for job');
+    if (!stRes.ok) {
+      const text = await stRes.text().catch(() => '');
+      onStatus?.('error');
+      throw new Error(`Job status error (${stRes.status}): ${text}`);
+    }
 
-    await new Promise((r) => setTimeout(r, interval));
-    // gentle backoff up to 5s
-    interval = Math.min(Math.round(interval * 1.25), maxInterval);
+    const st = await stRes.json();
+    const backendStatus: string =
+      st.status || st.state || st.job_status || 'running';
+
+    const uiState = mapStatus(backendStatus);
+    if (uiState !== lastEmitted) {
+      lastEmitted = uiState;
+      onStatus?.(uiState);
+    }
+
+    if (uiState === 'done') {
+      const result: ItineraryResponse =
+        st.result || st.data || st.itinerary;
+      if (!result) {
+        onStatus?.('error');
+        throw new Error('Job completed but no itinerary result was found in payload');
+      }
+      onStatus?.('done');
+      return result;
+    }
+
+    if (uiState === 'error') {
+      const msg = st.error || 'Job failed';
+      onStatus?.('error');
+      throw new Error(msg);
+    }
+
+    await sleep(POLL_MS);
   }
 }

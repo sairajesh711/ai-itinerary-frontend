@@ -1,47 +1,42 @@
 <script lang="ts">
-  import LoadingAnimation from '$lib/components/LoadingAnimation.svelte';
+  import Loading from '$lib/components/LoadingAnimation.svelte';
+  import ItineraryForm from '$lib/components/ItineraryForm.svelte';
+  import { postItinerary, type JobState } from '$lib/api';
+  import { itinerary } from '$lib/stores';
   import { resolveArtwork } from '$lib/artwork';
-  import { postItinerary, waitForJob } from '$lib/api';
-  import type { ItineraryRequest, ItineraryResponse } from '$lib/types';
+  import type { ItineraryRequest } from '$lib/types';
 
-  let destination = '';
+  // Loader state
   let loading = false;
-  let steps: string[] = [];
+  let backendState: JobState = 'idle'; // 'idle' | 'queued' | 'running' | 'done' | 'error'
 
-  $: art = resolveArtwork(destination);
+  // Artwork reacts to the destination being typed
+  let destForArt = '';
+  $: art = resolveArtwork(destForArt);
 
-  async function onSubmit(e: Event) {
-    e.preventDefault();
-    steps = [];
+  async function handleFormSubmit(e: CustomEvent<Partial<ItineraryRequest>>) {
+    const payload = e.detail;
+
     loading = true;
+    backendState = 'queued';
+
     try {
-      const payload: ItineraryRequest = {
-        destination,
-        start_date: '2025-10-05',   // TODO bind real inputs
-        end_date: '2025-10-10',
-        interests: ['history'],
-        travelers_count: 1,
-        budget_level: 'moderate',
-        pace: 'balanced',
-        language: 'en',
-        preferred_transport: ['walk','public_transit']
-      };
-      const { job_id } = await postItinerary(payload);
-
-      const result: ItineraryResponse = await waitForJob(job_id, {
-        onSteps(msgs) { steps = [...steps, ...msgs]; },
-        // we left defaults (starts ~1.8s, backs off to 5s)
-      });
-
-      console.log('[itinerary]', result);
-      // optional tiny delay to let the bar finish animating
-      await new Promise((r) => setTimeout(r, 350));
-    } catch (e) {
-      steps = [...steps, 'Something went wrong. Please try again.'];
-      console.error(e);
-    } finally {
+      const result = await postItinerary(payload as ItineraryRequest, (s) => backendState = s);
+      itinerary.set(result);
+      // Loading overlay will finish itself (98→100) then emit finish
+    } catch (err) {
+      console.error(err);
+      backendState = 'error';
       loading = false;
     }
+  }
+
+  function onDestChange(e: CustomEvent<string>) {
+    destForArt = e.detail || '';
+  }
+
+  function handleFinish() {
+    loading = false;
   }
 </script>
 
@@ -62,25 +57,12 @@
     <p class="mt-2 text-sm text-slate-500">Minimal • matte • slick</p>
   </div>
 
-  <form class="card p-6 max-w-xl card-interactive card-form" on:submit={onSubmit}>
-    <!-- your inputs... -->
-    <label class="block text-sm font-medium mb-2" for="dest">Where are you going?</label>
-    <input
-      id="dest"
-      class="w-full rounded-2xl border border-slate-300 bg-stone-100 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 text-base"
-      type="text"
-      placeholder="e.g., Paris, Durban, Kyoto"
-      bind:value={destination}
-      autocomplete="off"
-      spellcheck="false"
-    />
-    <div class="mt-4 flex items-center justify-between">
-      <p class="text-xs text-slate-500 font-note">The background sketch adapts as you type.</p>
-      <button type="submit" class="btn btn-primary">Get started</button>
-    </div>
-  </form>
+  <ItineraryForm
+    on:submitForm={handleFormSubmit}
+    on:destinationChange={onDestChange}
+  />
 
-  <!-- Placeholders while loading -->
+  <!-- Placeholder sections while you’re wiring results -->
   <section class="mt-8 space-y-4">
     <div class="card p-6 card-interactive card-placeholder">
       <h2 class="font-heading text-xl sm:text-2xl font-semibold mb-2">Daily Timeline</h2>
@@ -95,4 +77,11 @@
   </section>
 </main>
 
-<LoadingAnimation visible={loading} {steps} />
+<!-- Clean, monotonic, ~20s loader -->
+<Loading
+  visible={loading}
+  backendState={backendState}
+  totalMs={20000}
+  holdCap={98}
+  on:finish={handleFinish}
+/>
