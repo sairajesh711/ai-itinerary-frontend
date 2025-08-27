@@ -1,6 +1,6 @@
-import type { Category } from './types'
+import type { Activity, TravelLeg } from './types'
 
-export function iconForCategory(cat?: Category) {
+export function iconForCategory(cat?: Activity['category']) {
   switch (cat) {
     case 'food': return '🍽️'
     case 'coffee': return '☕'
@@ -15,12 +15,13 @@ export function iconForCategory(cat?: Category) {
     case 'experience': return '⭐'
     case 'hotel': return '🏨'
     case 'transport': return '🧭'
-    case 'view': return '🌇'
+    case 'sightseeing': return '📍'
+    case 'break': return '⏸️'
     default: return '📍'
   }
 }
 
-export function iconForMode(mode?: TravelMode) {
+export function iconForMode(mode?: TravelLeg['mode']) {
   switch (mode) {
     case 'walk': return '🚶'
     case 'public_transit': return '🚌'

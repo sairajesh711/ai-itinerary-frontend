@@ -104,17 +104,23 @@ export type ItineraryResponse = {
   meta: Meta;
 };
 
-// What your form will submit. Keep minimal for now.
-export type ItineraryRequest = {
+// Strong typing for form values
+export type BudgetLevel = 'shoestring' | 'moderate' | 'comfortable' | 'luxury';
+export type Pace = 'relaxed' | 'balanced' | 'packed';
+export type Transport = 'walk'|'public_transit'|'car'|'train'|'bike'|'rideshare';
+
+export interface ItineraryRequest {
   destination: string;
-  start_date?: string;
+  start_date: string;               // yyyy-mm-dd
   end_date?: string;
   duration_days?: number;
   interests?: string[];
   travelers_count?: number;
-  budget_level?: 'shoestring' | 'moderate' | 'comfortable' | 'luxury';
-  pace?: 'relaxed' | 'balanced' | 'packed';
+  budget_level?: BudgetLevel;
+  pace?: Pace;
   language?: 'en';
-  preferred_transport?: Array<'walk' | 'public_transit' | 'car' | 'train' | 'bike' | 'rideshare'>;
-  max_daily_budget?: number | null;
-};
+  preferred_transport?: Transport[];
+  // NEW
+  home_currency?: string;          // e.g., "GBP"
+  max_daily_budget?: number;       // in home_currency
+}

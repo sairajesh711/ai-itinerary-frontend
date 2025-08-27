@@ -4,6 +4,7 @@
   import { postItinerary, type JobState } from '$lib/api';
   import { itinerary } from '$lib/stores';
   import { resolveArtwork } from '$lib/artwork';
+  import { goto } from '$app/navigation';
   import type { ItineraryRequest } from '$lib/types';
 
   // Loader state
@@ -23,7 +24,8 @@
     try {
       const result = await postItinerary(payload as ItineraryRequest, (s) => backendState = s);
       itinerary.set(result);
-      // Loading overlay will finish itself (98→100) then emit finish
+      // Wait a tick to ensure store update propagates before navigation
+      await new Promise(resolve => setTimeout(resolve, 100));
     } catch (err) {
       console.error(err);
       backendState = 'error';
@@ -37,6 +39,10 @@
 
   function handleFinish() {
     loading = false;
+    // Navigate to itinerary page after loading finishes
+    if ($itinerary) {
+      goto('/itinerary');
+    }
   }
 </script>
 
@@ -77,11 +83,11 @@
   </section>
 </main>
 
-<!-- Clean, monotonic, ~20s loader -->
+<!-- Clean, monotonic, ~3min loader for AI processing -->
 <Loading
   visible={loading}
   backendState={backendState}
-  totalMs={20000}
-  holdCap={98}
+  totalMs={180000}
+  holdCap={95}
   on:finish={handleFinish}
 />

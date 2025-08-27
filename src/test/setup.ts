@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import { vi } from 'vitest';
 
 // Mock environment variables for testing
 Object.defineProperty(import.meta, 'env', {
@@ -8,4 +9,4 @@ Object.defineProperty(import.meta, 'env', {
 });
 
 // Mock fetch for API tests
-global.fetch = vi.fn();
+(globalThis as any).fetch = vi.fn();

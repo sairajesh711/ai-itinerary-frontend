@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { ItineraryRequest } from '$lib/types';
+  import type { ItineraryRequest, BudgetLevel, Pace, Transport } from '$lib/types';
 
   const dispatch = createEventDispatcher();
 
@@ -12,11 +12,12 @@
 
   // Form extras
   export let interests: string[] = [];
-  export let budget_level: 'shoestring' | 'moderate' | 'comfortable' | 'luxury' = 'moderate';
-  export let pace: 'relaxed' | 'balanced' | 'packed' = 'balanced';
+  export let budget_level: BudgetLevel = 'moderate';
+  export let pace: Pace = 'balanced';
   export let travelers_count = 1;
-  export let preferred_transport: Array<'walk'|'public_transit'|'car'|'train'|'bike'|'rideshare'> = ['walk', 'public_transit'];
+  export let preferred_transport: Transport[] = ['walk', 'public_transit'];
   export let max_daily_budget: number | null = null;
+  export let home_currency = '';
 
   // Interest options (monochrome, “hand-drawn” vibe via stroke SVGs)
   const INTERESTS: { key: string; label: string; svg: string }[] = [
@@ -35,7 +36,7 @@
   ];
 
   // Transport options
-  const TRANSPORT: { key: any; label: string; svg: string }[] = [
+  const TRANSPORT: { key: Transport; label: string; svg: string }[] = [
     { key: 'walk',           label: 'Walk',          svg: '<path d="M6 3a1 1 0 102 0 1 1 0 10-2 0z M6 5v3l-2 3m4-6l2 2 1 4" stroke-width="1.5"/>' },
     { key: 'public_transit', label: 'Transit',       svg: '<path d="M4 4h8v6H4zM5 11h2m4 0h2" stroke-width="1.5"/>' },
     { key: 'train',          label: 'Train',         svg: '<path d="M4 4h8v6H4zM5 10l-1 2m7-2l1 2" stroke-width="1.5"/>' },
@@ -47,7 +48,7 @@
   function toggleInterest(k: string) {
     interests = interests.includes(k) ? interests.filter(i => i !== k) : [...interests, k];
   }
-  function toggleTransport(k: any) {
+  function toggleTransport(k: Transport) {
     preferred_transport = preferred_transport.includes(k)
       ? preferred_transport.filter(t => t !== k)
       : [...preferred_transport, k];
@@ -65,8 +66,10 @@
       preferred_transport
     };
     if (max_daily_budget != null && !Number.isNaN(max_daily_budget)) {
-      // @ts-ignore optional in backend
       base.max_daily_budget = Math.max(0, Math.floor(max_daily_budget));
+    }
+    if (home_currency) {
+      base.home_currency = home_currency;
     }
     if (end_date) base.end_date = end_date;
     else base.duration_days = Math.max(1, Number(duration_days) || 3);
@@ -133,7 +136,7 @@
   <!-- Interests grid -->
   <div class="mt-6">
     <div class="flex items-baseline justify-between">
-      <label class="block text-sm font-medium">Interests</label>
+      <span class="block text-sm font-medium">Interests</span>
       <span class="text-xs text-slate-500 font-note">Pick a few that fit your vibe</span>
     </div>
     <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -156,8 +159,8 @@
   <!-- Budget & pace segmented controls -->
   <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
     <div>
-      <label class="block text-sm font-medium">Budget</label>
-      <div class="seg mt-2">
+      <span class="block text-sm font-medium">Budget</span>
+      <div class="seg mt-2" role="group" aria-label="Budget level">
         {#each (['shoestring','moderate','comfortable','luxury'] as any) as b}
           <button type="button" class="seg-btn {budget_level===b?'seg-active':''}"
             on:click={() => budget_level = b}>{b}</button>
@@ -165,8 +168,8 @@
       </div>
     </div>
     <div>
-      <label class="block text-sm font-medium">Pace</label>
-      <div class="seg mt-2">
+      <span class="block text-sm font-medium">Pace</span>
+      <div class="seg mt-2" role="group" aria-label="Trip pace">
         {#each (['relaxed','balanced','packed'] as any) as p}
           <button type="button" class="seg-btn {pace===p?'seg-active':''}"
             on:click={() => pace = p}>{p}</button>
@@ -192,8 +195,8 @@
       </div>
 
       <div class="sm:col-span-2">
-        <label class="block text-sm font-medium">Preferred transport</label>
-        <div class="mt-2 flex flex-wrap gap-2">
+        <span class="block text-sm font-medium">Preferred transport</span>
+        <div class="mt-2 flex flex-wrap gap-2" role="group" aria-label="Preferred transport methods">
           {#each TRANSPORT as t}
             <button
               type="button"
@@ -211,16 +214,38 @@
       </div>
     </div>
 
-    <div class="mt-4">
-      <label class="block text-sm font-medium mb-2" for="mdb">Max daily budget (optional)</label>
-      <input
-        id="mdb"
-        class="w-full rounded-2xl border border-slate-300 bg-stone-100 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 text-base"
-        type="number"
-        min="0" step="1"
-        bind:value={max_daily_budget}
-        placeholder="EUR per day"
-      />
+    <div class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-2" for="home_ccy">Home currency</label>
+        <select
+          id="home_ccy"
+          class="w-full rounded-2xl border border-slate-300 bg-stone-100 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-300 text-base"
+          bind:value={home_currency}
+        >
+          <option value="" disabled selected hidden>Select</option>
+          <option value="GBP">GBP</option>
+          <option value="EUR">EUR</option>
+          <option value="USD">USD</option>
+          <option value="INR">INR</option>
+          <option value="AUD">AUD</option>
+          <option value="CAD">CAD</option>
+          <option value="JPY">JPY</option>
+          <option value="ZAR">ZAR</option>
+          <!-- add more as needed -->
+        </select>
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-sm font-medium mb-2" for="mdb">Max daily budget (optional)</label>
+        <input
+          id="mdb" 
+          class="w-full rounded-2xl border border-slate-300 bg-stone-100 px-4 py-3 outline-none focus:ring-2 focus:ring-slate-300 text-base"
+          type="number" 
+          min="0" 
+          step="1" 
+          bind:value={max_daily_budget} 
+          placeholder="Amount in selected currency"
+        />
+      </div>
     </div>
   </details>
 
