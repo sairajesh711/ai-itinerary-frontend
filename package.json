@@ -14,7 +14,10 @@
 		"lint": "prettier --check . && eslint .",
 		"test": "vitest",
 		"test:ui": "vitest --ui",
-		"test:run": "vitest run"
+		"test:run": "vitest run",
+		"build:prod": "NODE_ENV=production npm run build",
+		"validate:env": "node scripts/validate-env.js",
+		"deploy:check": "npm run validate:env && npm run test:run && npm run lint && npm run build:prod"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -43,6 +46,7 @@
 		"vitest": "^3.2.4"
 	},
 	"dependencies": {
+		"@maptiler/sdk": "^3.7.0",
 		"leaflet": "^1.9.4"
 	}
 }

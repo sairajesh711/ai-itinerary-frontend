@@ -7,3 +7,4 @@ SvelteKit + Tailwind + Leaflet. Mobile-first timeline + map view.
 ```bash
 npm i
 npm run dev
+```
