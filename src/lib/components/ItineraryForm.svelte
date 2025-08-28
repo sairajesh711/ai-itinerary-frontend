@@ -92,7 +92,7 @@
     spellcheck="false"
     required
   />
-  <p class="mt-2 text-xs text-slate-500 font-note">The background sketch adapts as you type.</p>
+  <p class="mt-2 text-xs helper-text">The background sketch adapts as you type.</p>
 
   <!-- Dates -->
   <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -137,7 +137,7 @@
   <div class="mt-6">
     <div class="flex items-baseline justify-between">
       <span class="block text-sm font-medium">Interests</span>
-      <span class="text-xs text-slate-500 font-note">Pick a few that fit your vibe</span>
+      <span class="text-xs helper-text">Pick a few that fit your vibe</span>
     </div>
     <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
       {#each INTERESTS as it}
@@ -250,6 +250,6 @@
   </details>
 
   <div class="mt-6 flex items-center justify-end gap-3">
-    <button type="submit" class="btn btn-primary">Create itinerary</button>
+    <button type="submit" class="btn btn-primary">Plan My Adventure</button>
   </div>
 </form>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { fade } from 'svelte/transition';
@@ -11,11 +11,36 @@
 
   let currentItinerary: ItineraryResponse | null = null;
   let selectedDayPlan: any = null;
+  let dayComponents: DailyPlan[] = [];
+  let lastMode = $ui.mode;
 
   // Subscribe to store changes
   $: currentItinerary = $itinerary;
   $: if (currentItinerary) {
     selectedDayPlan = currentItinerary.daily_plan.find(d => d.day_index === $ui.selectedDay);
+  }
+  
+  // Handle mode changes and cross-view synchronization
+  $: if ($ui.mode !== lastMode) {
+    handleModeChange($ui.mode, lastMode);
+    lastMode = $ui.mode;
+  }
+  
+  async function handleModeChange(newMode: string, oldMode: string) {
+    if (newMode === 'timeline' && oldMode === 'map') {
+      // Switching from map to timeline - scroll to selected day
+      await tick();
+      scrollToSelectedDay();
+    }
+  }
+  
+  function scrollToSelectedDay() {
+    const dayComponent = dayComponents.find((_, i) => 
+      currentItinerary?.daily_plan[i]?.day_index === $ui.selectedDay
+    );
+    if (dayComponent && dayComponent.scrollIntoView) {
+      dayComponent.scrollIntoView();
+    }
   }
 
   onMount(() => {
@@ -80,21 +105,33 @@
           <ViewToggle />
         </div>
 
-        {#if $ui.mode === 'timeline'}
-          <!-- Timeline View -->
-          <div class="space-y-8">
-            {#each currentItinerary.daily_plan as day (day.day_index)}
-              <DailyPlan {day} />
-            {/each}
-          </div>
-        {:else}
-          <!-- Map View -->
-          {#if selectedDayPlan}
-            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-              <MapView dayPlan={selectedDayPlan} />
+        <div id="main-content" role="tabpanel" aria-labelledby="view-toggle">
+          {#if $ui.mode === 'timeline'}
+            <!-- Timeline View -->
+            <div class="space-y-8" in:fade={{ duration: 200 }}>
+              {#each currentItinerary.daily_plan as day, i (day.day_index)}
+                <DailyPlan bind:this={dayComponents[i]} {day} />
+              {/each}
             </div>
+          {:else}
+            <!-- Map View -->
+            {#if selectedDayPlan}
+              <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden" in:fade={{ duration: 200 }}>
+                <MapView dayPlan={selectedDayPlan} totalDays={currentItinerary.total_days} />
+              </div>
+            {:else}
+              <div class="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+                <div class="text-slate-500">
+                  <svg class="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m-6 3l6-3"/>
+                  </svg>
+                  <p class="font-medium">No activities with locations found for this day</p>
+                  <p class="text-sm mt-1">Switch to timeline view to see all activities</p>
+                </div>
+              </div>
+            {/if}
           {/if}
-        {/if}
+        </div>
 
         <!-- Logistics Footer -->
         {#if currentItinerary.logistics && (currentItinerary.logistics.transit_tips?.length || currentItinerary.logistics.safety_etiquette?.length)}
@@ -136,3 +173,45 @@
     </div>
   </div>
 {/if}
+
+<style>
+  /* Journal-like background texture */
+  .min-h-screen {
+    background-image: 
+      radial-gradient(circle at 20% 30%, rgba(15, 23, 42, 0.01) 1px, transparent 1px),
+      radial-gradient(circle at 80% 70%, rgba(15, 23, 42, 0.01) 1px, transparent 1px);
+    background-size: 24px 24px, 32px 32px;
+  }
+  
+  /* Enhanced readability with subtle paper texture */
+  main {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(1px);
+    border-radius: 24px 24px 0 0;
+    margin-top: 8px;
+  }
+  
+  /* Smooth transitions for view changes */
+  #main-content {
+    min-height: 400px;
+  }
+  
+  /* Enhanced contrast for better readability */
+  @media (prefers-contrast: high) {
+    .min-h-screen {
+      background: white;
+    }
+    
+    main {
+      background: white;
+      box-shadow: 0 0 0 2px #0f172a;
+    }
+  }
+  
+  /* Respect reduced motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    main {
+      backdrop-filter: none;
+    }
+  }
+</style>

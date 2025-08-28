@@ -1,189 +1,173 @@
-<script context="module" lang="ts">
-  export type MapActivity = {
-    title: string;
-    start_time?: string | null;
-    place?: {
-      name?: string | null;
-      coordinates?: { lat: number; lng: number } | null;
-    } | null;
-  };
-</script>
-
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-
-  export let activities: MapActivity[] = [];
-
-  let mapEl: HTMLDivElement | null = null;
-  let map: any = null;
-  let L: any = null;
-  let layer: any = null;
-  let markers: any[] = [];
-
-  // Build simple POIs from activities
-  function toPoints() {
-    return (activities || [])
-      .map((a, i) => {
-        const c = a.place?.coordinates;
-        if (!c || typeof c.lat !== 'number' || typeof c.lng !== 'number') return null;
-        return {
-          i: i + 1,
-          title: a.title || 'Untitled',
-          time: a.start_time || '',
-          name: a.place?.name || '',
-          lat: c.lat,
-          lng: c.lng
-        };
-      })
-      .filter(Boolean) as Array<{i:number; title:string; time:string; name:string; lat:number; lng:number}>;
+  import { ui } from '$lib/stores';
+  
+  function toggleView(mode: 'timeline' | 'map') {
+    ui.update(state => ({ ...state, mode }));
   }
-
-  function clearMarkers() {
-    markers.forEach((m) => m.remove());
-    markers = [];
-  }
-
-  function fitBounds(points: ReturnType<typeof toPoints>) {
-    if (!map || !points.length) return;
-    const bounds = (L as any).latLngBounds(points.map((p) => [p.lat, p.lng]));
-    map.fitBounds(bounds.pad(0.25));
-  }
-
-  function renderMarkers() {
-    if (!map || !L) return;
-    clearMarkers();
-    const points = toPoints();
-    if (!points.length) {
-      // Fallback view (Lisbon-ish) so the map never looks broken
-      map.setView([38.72, -9.14], 12);
-      return;
-    }
-
-    points.forEach((p) => {
-      const html = `
-        <div class="pin">
-          <span class="num">${p.i}</span>
-        </div>
-      `;
-      const icon = (L as any).divIcon({
-        className: 'pin-wrap',
-        html,
-        iconSize: [28, 28],
-        iconAnchor: [14, 28],
-      });
-
-      const m = (L as any)
-        .marker([p.lat, p.lng], { icon })
-        .addTo(map)
-        .bindPopup(
-          `<div class="popup">
-            <div class="popup-title">${p.title}</div>
-            ${p.time ? `<div class="popup-sub">${p.time}</div>` : ''}
-            ${p.name ? `<div class="popup-sub">${p.name}</div>` : ''}
-          </div>`
-        );
-
-      markers.push(m);
-    });
-
-    fitBounds(points);
-  }
-
-  function handleResize() {
-    if (map) map.invalidateSize();
-  }
-
-  onMount(async () => {
-    const leaflet = await import('leaflet');
-    await import('leaflet/dist/leaflet.css');
-    L = leaflet.default;
-
-    map = L.map(mapEl!, {
-      zoomControl: false,
-      attributionControl: true
-    });
-
-    // Free, no-key OSM tiles (we desaturate via CSS below)
-    layer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution:
-        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    });
-    layer.addTo(map);
-
-    // Minimal zoom UI, styled monochrome in CSS
-    L.control.zoom({ position: 'topright' }).addTo(map);
-
-    renderMarkers();
-    window.addEventListener('resize', handleResize);
-  });
-
-  // Re-render markers when activities change
-  $: if (map) renderMarkers();
-
-  onDestroy(() => {
-    window.removeEventListener('resize', handleResize);
-    if (map) map.remove();
-  });
 </script>
 
-<div bind:this={mapEl} class="map h-[60vh] w-full rounded-2xl border border-slate-200 shadow-sm overflow-hidden"></div>
+<div class="view-toggle" role="tablist" aria-label="View mode selection">
+  <button
+    type="button"
+    role="tab"
+    aria-selected={$ui.mode === 'timeline'}
+    aria-controls="main-content"
+    class="toggle-btn {$ui.mode === 'timeline' ? 'active' : ''}"
+    on:click={() => toggleView('timeline')}
+  >
+    <!-- Hand-drawn timeline icon -->
+    <svg viewBox="0 0 16 16" class="icon" aria-hidden="true">
+      <g stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round">
+        <!-- Timeline spine -->
+        <path d="M3 2v12" />
+        <!-- Timeline nodes -->
+        <circle cx="3" cy="4" r="1.5" fill="currentColor" />
+        <circle cx="3" cy="7.5" r="1.5" fill="currentColor" />
+        <circle cx="3" cy="11" r="1.5" fill="currentColor" />
+        <!-- Content lines (hand-drawn style) -->
+        <path d="M5.5 3.5h7" />
+        <path d="M5.5 4.5h5" />
+        <path d="M5.5 7h6.5" />
+        <path d="M5.5 8h4" />
+        <path d="M5.5 10.5h7" />
+        <path d="M5.5 11.5h5.5" />
+      </g>
+    </svg>
+    <span>Timeline</span>
+  </button>
+  
+  <button
+    type="button" 
+    role="tab"
+    aria-selected={$ui.mode === 'map'}
+    aria-controls="main-content"
+    class="toggle-btn {$ui.mode === 'map' ? 'active' : ''}"
+    on:click={() => toggleView('map')}
+  >
+    <!-- Hand-drawn map icon -->
+    <svg viewBox="0 0 16 16" class="icon" aria-hidden="true">
+      <g stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round">
+        <!-- Map outline (slightly irregular) -->
+        <path d="M2.5 3c0 0 1.5-1 4-0.5s3.5 1.5 6 0.5c0.5 0.3 1 1.2 1 2v7c0 0.5-0.3 1-1 1-2.5 1-3.5-1.5-6-0.5s-4 0.5-4 0.5c-0.5-0.2-1-0.8-1-1.5V4.5c0-0.7 0.5-1.3 1-1.5z" />
+        <!-- Map fold lines -->
+        <path d="M6.5 2.5v11" />
+        <path d="M10.5 2.5v11" />
+        <!-- Small landmarks -->
+        <circle cx="4" cy="6" r="0.8" fill="currentColor" />
+        <circle cx="8" cy="8.5" r="0.8" fill="currentColor" />
+        <circle cx="12" cy="5.5" r="0.8" fill="currentColor" />
+      </g>
+    </svg>
+    <span>Map</span>
+  </button>
+</div>
 
 <style>
-  /* Desaturate tiles to “vintage” pencil vibe (markers remain crisp) */
-  .map :global(.leaflet-tile) {
-    filter: grayscale(100%) contrast(90%) brightness(105%);
+  .view-toggle {
+    display: inline-flex;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(15, 23, 42, 0.12);
+    border-radius: 16px;
+    padding: 4px;
+    box-shadow: 
+      0 2px 8px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    position: sticky;
+    top: 20px;
+    z-index: 10;
   }
-  /* Zoom control monochrome */
-  .map :global(.leaflet-control-zoom a) {
-    background: #0f172a; /* slate-900 */
-    color: #fff;
-    border: 1px solid #0f172a;
-    box-shadow: none;
-  }
-  .map :global(.leaflet-control-zoom a:hover) {
-    background: #111827;
-  }
-  /* Popup styling */
-  .map :global(.leaflet-popup-content-wrapper) {
-    border-radius: 14px;
-    border: 1px solid rgba(15,23,42,.16);
-    box-shadow: 0 10px 22px rgba(15,23,42,.08);
-  }
-  .map :global(.leaflet-popup-tip) {
-    background: #fff;
-    border: 1px solid rgba(15,23,42,.16);
-  }
-  .popup { font-family: Inter, system-ui, sans-serif; color: #0f172a; }
-  .popup-title { font-weight: 600; font-size: 0.95rem; line-height: 1.2; }
-  .popup-sub { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
-
-  /* Monochrome “pushpin” marker (divIcon) */
-  .pin-wrap { filter: drop-shadow(0 2px 4px rgba(15,23,42,.22)); }
-  .pin {
-    width: 28px; height: 28px;
-    border-radius: 999px;
-    background: #0f172a; /* ink */
+  
+  .toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: #64748b;
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
-    outline: 1.5px solid rgba(255,255,255,.85);
-    box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,.2),
-      0 10px 14px rgba(15,23,42,.12);
+    min-width: 100px;
+    justify-content: center;
   }
-  .pin::after {
-    /* needle shadow */
+  
+  .toggle-btn:hover {
+    color: #334155;
+    background: rgba(15, 23, 42, 0.04);
+  }
+  
+  .toggle-btn:focus-visible {
+    outline: 2px solid #0f172a;
+    outline-offset: 2px;
+  }
+  
+  .toggle-btn.active {
+    background: #0f172a;
+    color: white;
+    box-shadow: 
+      0 2px 6px rgba(15, 23, 42, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+  
+  .toggle-btn.active:hover {
+    background: #1e293b;
+    color: white;
+  }
+  
+  .icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  
+  /* Journal-like texture on hover */
+  .toggle-btn::before {
     content: '';
     position: absolute;
-    left: 13px; bottom: -8px;
-    width: 2px; height: 10px;
-    background: linear-gradient(#0f172a,#0f172a);
-    opacity: .85;
+    inset: 0;
+    border-radius: inherit;
+    background-image: 
+      radial-gradient(circle at 20% 30%, rgba(15, 23, 42, 0.02) 1px, transparent 1px),
+      radial-gradient(circle at 80% 70%, rgba(15, 23, 42, 0.02) 1px, transparent 1px);
+    background-size: 12px 12px, 16px 16px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
   }
-  .num {
-    position: absolute; inset: 0;
-    display: grid; place-items: center;
-    color: white;
-    font-family: Roboto, Inter, sans-serif;
-    font-weight: 600; font-size: .8rem;
+  
+  .toggle-btn:hover::before {
+    opacity: 1;
+  }
+  
+  .toggle-btn.active::before {
+    opacity: 0;
+  }
+  
+  /* Accessibility improvements */
+  @media (prefers-reduced-motion: reduce) {
+    .toggle-btn {
+      transition: none;
+    }
+  }
+  
+  @media (prefers-contrast: high) {
+    .view-toggle {
+      border-color: #0f172a;
+      background: white;
+    }
+    
+    .toggle-btn {
+      color: #0f172a;
+    }
+    
+    .toggle-btn.active {
+      background: #0f172a;
+      color: white;
+    }
   }
 </style>
