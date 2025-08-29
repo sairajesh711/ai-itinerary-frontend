@@ -36,16 +36,16 @@
 
 ```bash
 # Set these environment variables in Vercel dashboard:
-VITE_API_BASE=https://your-backend-url.com
-PUBLIC_MAPTILER_KEY=your_actual_maptiler_key
+VITE_API_BASE=https://ai-itinerary-backend.onrender.com
+PUBLIC_MAPTILER_KEY=ut1P8ceHb8kmMz3VhnyU
 ```
 
 ### **Render Deployment**
 
 ```bash
 # Set these in Render environment variables:
-VITE_API_BASE=https://your-backend-url.com
-PUBLIC_MAPTILER_KEY=your_actual_maptiler_key
+VITE_API_BASE=https://ai-itinerary-backend.onrender.com
+PUBLIC_MAPTILER_KEY=ut1P8ceHb8kmMz3VhnyU
 NODE_ENV=production
 ```
 
@@ -53,7 +53,7 @@ NODE_ENV=production
 
 ```bash
 # Test production build locally:
-VITE_API_BASE=https://your-backend-url.com npm run build:prod
+VITE_API_BASE=https://ai-itinerary-backend.onrender.com npm run build:prod
 npm run deploy:check  # Runs all validations
 ```
 

@@ -5,8 +5,8 @@
 ### Essential Variables
 
 ```bash
-# Required: Backend API URL (replace with your actual backend URL)
-VITE_API_BASE=https://your-backend-api.herokuapp.com
+# Required: Backend API URL (your actual backend URL)
+VITE_API_BASE=https://ai-itinerary-backend.onrender.com
 
 # Required: MapTiler API Key
 PUBLIC_MAPTILER_KEY=your_maptiler_api_key_here
@@ -24,7 +24,7 @@ PUBLIC_MAPTILER_KEY=your_maptiler_api_key_here
 
    ```bash
    # In Vercel Dashboard > Project Settings > Environment Variables
-   VITE_API_BASE=https://your-backend-url.com
+   VITE_API_BASE=https://ai-itinerary-backend.onrender.com
    PUBLIC_MAPTILER_KEY=your_maptiler_key
    ```
 
@@ -48,7 +48,7 @@ PUBLIC_MAPTILER_KEY=your_maptiler_api_key_here
 
 3. **Environment Variables**
    ```bash
-   VITE_API_BASE=https://your-backend-url.com
+   VITE_API_BASE=https://ai-itinerary-backend.onrender.com
    PUBLIC_MAPTILER_KEY=your_maptiler_key
    NODE_ENV=production
    ```
@@ -64,7 +64,7 @@ PUBLIC_MAPTILER_KEY=your_maptiler_api_key_here
 
 2. **Environment Variables**
    ```bash
-   VITE_API_BASE=https://your-backend-url.com
+   VITE_API_BASE=https://ai-itinerary-backend.onrender.com
    PUBLIC_MAPTILER_KEY=your_maptiler_key
    ```
 
@@ -150,8 +150,8 @@ Create `.env.local` for production:
 
 ```bash
 # Production Environment Variables
-VITE_API_BASE=https://ai-itinerary-backend.herokuapp.com
-PUBLIC_MAPTILER_KEY=pk.ey1234567890abcdef
+VITE_API_BASE=https://ai-itinerary-backend.onrender.com
+PUBLIC_MAPTILER_KEY=ut1P8ceHb8kmMz3VhnyU
 NODE_ENV=production
 ```
 

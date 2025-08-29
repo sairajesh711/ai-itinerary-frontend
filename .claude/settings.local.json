@@ -1,7 +1,10 @@
 {
-	"permissions": {
-		"allow": ["Bash(npm run format:*)"],
-		"deny": [],
-		"ask": []
-	}
+  "permissions": {
+    "allow": [
+      "Bash(npm run format:*)",
+      "Bash(git remote set-head:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
 }
