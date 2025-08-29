@@ -15,7 +15,7 @@ export interface ApiConfig {
  * Priority order: Google Cloud Run (primary) -> Local dev
  */
 const API_ENDPOINTS = {
-	production: 'https://ai-itinerary-backend-adijnzupnq-el.a.run.app',
+	production: 'https://ai-itinerary-backend-961837492888.asia-south1.run.app',
 	backup: 'https://ai-itinerary-backend.onrender.com', // Keep as backup
 	development: 'http://127.0.0.1:8000'
 } as const;
@@ -48,10 +48,8 @@ export function getApiConfig(): ApiConfig {
 		retries: 3,
 		headers: {
 			'Content-Type': 'application/json',
-			'Accept': 'application/json',
-			// Using Authorization header for security instead of X-Requested-With
-			// Backend allows: Accept, Accept-Language, Authorization, Content-Language, Content-Type
-			'Accept-Language': 'en-US,en;q=0.9'
+			'Accept': 'application/json'
+			// Simplified to only use basic headers that work with CORS
 		}
 	};
 }

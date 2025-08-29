@@ -21,6 +21,28 @@ type JobEnvelope = {
 const API_BASE = API_CONFIG.baseUrl;
 
 /**
+ * Emergency CORS bypass - ultra minimal request
+ */
+async function emergencyFetch(url: string, options: RequestInit): Promise<Response> {
+	// Strip all potentially problematic options
+	const safeOptions: RequestInit = {
+		method: options.method || 'GET',
+		headers: {
+			'Content-Type': 'application/json',
+			'Accept': 'application/json'
+			// Only these two headers - nothing else
+		},
+		body: options.body,
+		mode: 'cors',
+		credentials: 'omit',
+		cache: 'no-cache'
+	};
+	
+	console.log('🆘 Emergency fetch to:', url);
+	return fetch(url, safeOptions);
+}"
+
+/**
  * Validate API URL to prevent SSRF attacks
  */
 function validateApiUrl(url: string): string {
@@ -153,12 +175,11 @@ async function fetchWithRetry(
 
 	for (let attempt = 1; attempt <= retries; attempt++) {
 		try {
-			// Add security headers that are CORS-compliant
+			// Use minimal headers to avoid CORS issues
 			const secureHeaders = {
 				...API_CONFIG.headers,
-				...options.headers,
-				// Use Content-Language for request fingerprinting (CORS allowed)
-				'Content-Language': `en-${generateRequestFingerprint().substring(0, 8)}`
+				...options.headers
+				// Removed Content-Language fingerprinting to avoid CORS complications
 			};
 
 			const response = await fetch(url, {
@@ -273,19 +294,34 @@ export async function postItinerary(
 	console.log('🔒 Sending secure request with sanitized payload');
 	onStatus?.('queued');
 
-	// Create job with sanitized data
-	const createResponse = await withTimeout(
-		fetchWithRetry(`${API_BASE}/jobs/itinerary`, {
-			method: 'POST',
-			headers: {
-				Accept: 'application/json'
-			},
-			body: JSON.stringify(sanitizedPayload),
-			signal
-		}),
-		15000,
-		'create itinerary job'
-	);
+	// Create job with emergency CORS-safe approach
+	console.log('🔍 API Debug - Making request to:', API_BASE);
+	console.log('🔍 Origin:', typeof window !== 'undefined' ? window.location.origin : 'server');
+	
+	let createResponse: Response;
+	try {
+		createResponse = await withTimeout(
+			emergencyFetch(`${API_BASE}/jobs/itinerary`, {
+				method: 'POST',
+				body: JSON.stringify(sanitizedPayload),
+				signal
+			}),
+			15000,
+			'create itinerary job'
+		);
+	} catch (corsError) {
+		console.error('🚨 CORS Error Details:', corsError);
+		// Last resort: try without any custom options
+		createResponse = await withTimeout(
+			fetch(`${API_BASE}/jobs/itinerary`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(sanitizedPayload)
+			}),
+			15000,
+			'fallback create job'
+		);
+	}
 
 	if (!createResponse.ok) {
 		const text = await createResponse.text().catch(() => '');
