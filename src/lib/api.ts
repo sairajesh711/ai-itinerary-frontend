@@ -24,22 +24,26 @@ const API_BASE = API_CONFIG.baseUrl;
  * Emergency CORS bypass - ultra minimal request
  */
 async function emergencyFetch(url: string, options: RequestInit): Promise<Response> {
-	// Strip all potentially problematic options
+	// Create a completely clean request to avoid browser auto-headers
 	const safeOptions: RequestInit = {
 		method: options.method || 'GET',
 		headers: {
 			'Content-Type': 'application/json',
 			'Accept': 'application/json'
-			// Only these two headers - nothing else
+			// ONLY these headers - browser cache headers cause 400 error
 		},
 		body: options.body,
 		mode: 'cors',
 		credentials: 'omit',
-		cache: 'no-cache'
+		cache: 'no-store', // Prevent cache headers
+		redirect: 'follow'
 	};
 	
-	console.log('🆘 Emergency fetch to:', url);
-	return fetch(url, safeOptions);
+	console.log('🆘 Emergency fetch (cache-header-free) to:', url);
+	
+	// Create custom request to override browser defaults
+	const request = new Request(url, safeOptions);
+	return fetch(request);
 }
 
 /**
