@@ -75,6 +75,11 @@
 			<p><strong>Current Origin:</strong> {typeof window !== 'undefined' ? window.location.origin : 'server'}</p>
 			<p><strong>API Base:</strong> {import.meta.env.VITE_API_BASE || 'not configured (using proxy)'}</p>
 			<p><strong>Mode:</strong> {import.meta.env.DEV ? 'Development' : 'Production'}</p>
+			<p><strong>User Agent:</strong> {typeof navigator !== 'undefined' ? navigator.userAgent.substring(0, 60) + '...' : 'N/A'}</p>
+			<p><strong>Browser:</strong> {typeof navigator !== 'undefined' ? 
+				(navigator.userAgent.includes('Chrome') ? 'Chrome' : 
+				 navigator.userAgent.includes('Firefox') ? 'Firefox' : 
+				 navigator.userAgent.includes('Safari') ? 'Safari' : 'Other') : 'Unknown'}</p>
 		</div>
 
 		<div class="space-x-4">

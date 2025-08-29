@@ -21,29 +21,81 @@ type JobEnvelope = {
 const API_BASE = API_CONFIG.baseUrl;
 
 /**
- * Emergency CORS bypass - ultra minimal request
+ * Create job with multiple fallback strategies to handle various CORS scenarios
  */
-async function emergencyFetch(url: string, options: RequestInit): Promise<Response> {
-	// Create a completely clean request to avoid browser auto-headers
-	const safeOptions: RequestInit = {
-		method: options.method || 'GET',
-		headers: {
-			'Content-Type': 'application/json',
-			'Accept': 'application/json'
-			// ONLY these headers - browser cache headers cause 400 error
+async function createJobWithRetry(url: string, payload: any, signal?: AbortSignal): Promise<Response> {
+	const strategies = [
+		// Strategy 1: Clean, minimal request
+		() => fetch(url, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				'Accept': 'application/json'
+			},
+			body: JSON.stringify(payload),
+			mode: 'cors',
+			credentials: 'omit',
+			cache: 'no-store',
+			signal
+		}),
+		
+		// Strategy 2: Explicit Request object
+		() => {
+			const request = new Request(url, {
+				method: 'POST',
+				headers: new Headers({
+					'Content-Type': 'application/json',
+					'Accept': 'application/json'
+				}),
+				body: JSON.stringify(payload),
+				mode: 'cors',
+				credentials: 'omit',
+				cache: 'no-cache'
+			});
+			return fetch(request);
 		},
-		body: options.body,
-		mode: 'cors',
-		credentials: 'omit',
-		cache: 'no-store', // Prevent cache headers
-		redirect: 'follow'
-	};
+		
+		// Strategy 3: Bare minimum
+		() => fetch(url, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload)
+		})
+	];
 	
-	console.log('🆘 Emergency fetch (cache-header-free) to:', url);
+	let lastError: Error | null = null;
 	
-	// Create custom request to override browser defaults
-	const request = new Request(url, safeOptions);
-	return fetch(request);
+	for (let i = 0; i < strategies.length; i++) {
+		try {
+			console.log(`🚀 Trying request strategy ${i + 1}/${strategies.length}`);
+			const response = await strategies[i]();
+			
+			if (response.ok || response.status < 500) {
+				console.log(`✅ Strategy ${i + 1} succeeded:`, response.status);
+				return response;
+			}
+			
+			console.warn(`⚠️ Strategy ${i + 1} returned ${response.status}`);
+			lastError = new Error(`HTTP ${response.status}: ${response.statusText}`);
+			
+		} catch (error) {
+			lastError = error instanceof Error ? error : new Error(String(error));
+			console.warn(`🚨 Strategy ${i + 1} failed:`, lastError.message);
+			
+			// Don't retry if request was aborted
+			if (lastError.name === 'AbortError') {
+				throw lastError;
+			}
+		}
+		
+		// Small delay between attempts
+		if (i < strategies.length - 1) {
+			await new Promise(resolve => setTimeout(resolve, 200));
+		}
+	}
+	
+	// All strategies failed
+	throw lastError || new Error('All request strategies failed');
 }
 
 /**
@@ -298,34 +350,16 @@ export async function postItinerary(
 	console.log('🔒 Sending secure request with sanitized payload');
 	onStatus?.('queued');
 
-	// Create job with emergency CORS-safe approach
+	// Create job with comprehensive CORS handling
 	console.log('🔍 API Debug - Making request to:', API_BASE);
 	console.log('🔍 Origin:', typeof window !== 'undefined' ? window.location.origin : 'server');
+	console.log('🔍 User Agent:', typeof navigator !== 'undefined' ? navigator.userAgent.substring(0, 100) : 'N/A');
 	
-	let createResponse: Response;
-	try {
-		createResponse = await withTimeout(
-			emergencyFetch(`${API_BASE}/jobs/itinerary`, {
-				method: 'POST',
-				body: JSON.stringify(sanitizedPayload),
-				signal
-			}),
-			15000,
-			'create itinerary job'
-		);
-	} catch (corsError) {
-		console.error('🚨 CORS Error Details:', corsError);
-		// Last resort: try without any custom options
-		createResponse = await withTimeout(
-			fetch(`${API_BASE}/jobs/itinerary`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(sanitizedPayload)
-			}),
-			15000,
-			'fallback create job'
-		);
-	}
+	const createResponse = await withTimeout(
+		createJobWithRetry(`${API_BASE}/jobs/itinerary`, sanitizedPayload, signal),
+		15000,
+		'create itinerary job'
+	);
 
 	if (!createResponse.ok) {
 		const text = await createResponse.text().catch(() => '');
@@ -358,8 +392,14 @@ async function waitForJob(
 		}
 
 		const pollResponse = await withTimeout(
-			fetchWithRetry(`${API_BASE}/jobs/${jobId}?_t=${Date.now()}`, {
+			fetch(`${API_BASE}/jobs/${jobId}?_t=${Date.now()}`, {
 				method: 'GET',
+				headers: {
+					'Accept': 'application/json'
+				},
+				mode: 'cors',
+				credentials: 'omit',
+				cache: 'no-store',
 				signal
 			}),
 			12000,
