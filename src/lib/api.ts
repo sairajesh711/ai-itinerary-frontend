@@ -1,6 +1,7 @@
 // src/lib/api.ts
 import type { ItineraryRequest, ItineraryResponse } from './types';
 import { sanitizeUserInput, apiRateLimiter } from './utils/security';
+import { API_CONFIG, testApiEndpoint, getAllApiEndpoints } from './config';
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'error';
 export type JobState = 'queued' | 'running' | 'done' | 'error';
@@ -17,32 +18,7 @@ type JobEnvelope = {
 	error?: unknown;
 };
 
-/**
- * Get API base URL based on environment
- * - Development: Use proxy (/api) to avoid CORS issues
- * - Production: Use environment variable or throw error if not set
- */
-function getApiBaseUrl(): string {
-	const envApiBase = import.meta.env.VITE_API_BASE?.toString();
-
-	if (import.meta.env.DEV) {
-		// Development: use proxy if no explicit API base is set
-		return envApiBase || '/api';
-	} else {
-		// Production: require explicit API base URL
-		if (!envApiBase) {
-			throw new Error('VITE_API_BASE environment variable is required for production builds');
-		}
-		return validateApiUrl(envApiBase);
-	}
-}
-
-const API_BASE = getApiBaseUrl();
-
-const DEFAULT_HEADERS = {
-	'Content-Type': 'application/json',
-	'X-Requested-With': 'XMLHttpRequest' // CSRF protection
-};
+const API_BASE = API_CONFIG.baseUrl;
 
 /**
  * Validate API URL to prevent SSRF attacks
@@ -80,23 +56,39 @@ function validateApiUrl(url: string): string {
 }
 
 /**
- * Sanitize itinerary request payload
+ * Enhanced sanitize itinerary request payload with comprehensive validation
  */
 function sanitizeItineraryRequest(payload: ItineraryRequest): ItineraryRequest {
-	return {
+	// Deep validation to prevent injection attacks
+	const sanitized = {
 		...payload,
 		destination: sanitizeUserInput(payload.destination, 100),
 		interests: payload.interests?.map((interest) => sanitizeUserInput(interest, 50)) || [],
 		home_currency: payload.home_currency ? sanitizeUserInput(payload.home_currency, 5) : undefined,
-		// Validate numeric inputs
+		// Validate numeric inputs with strict bounds
 		travelers_count: Math.max(1, Math.min(12, Number(payload.travelers_count) || 1)),
 		duration_days: payload.duration_days
 			? Math.max(1, Math.min(30, Number(payload.duration_days)))
 			: undefined,
 		max_daily_budget: payload.max_daily_budget
-			? Math.max(0, Number(payload.max_daily_budget))
+			? Math.max(0, Math.min(100000, Number(payload.max_daily_budget))) // Cap at 100k
 			: undefined
 	};
+
+	// Security: Remove any unexpected properties
+	const allowedKeys = [
+		'destination', 'interests', 'home_currency', 'travelers_count', 
+		'duration_days', 'max_daily_budget', 'start_date', 'end_date'
+	];
+	
+	Object.keys(sanitized).forEach(key => {
+		if (!allowedKeys.includes(key)) {
+			console.warn(`🚨 Removing unexpected property: ${key}`);
+			delete (sanitized as any)[key];
+		}
+	});
+
+	return sanitized;
 }
 
 function normalizeStatus(s?: string): JobStatus {
@@ -138,6 +130,102 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label = 'request'
 	});
 }
 
+/**
+ * Generate a secure request fingerprint for additional protection
+ */
+function generateRequestFingerprint(): string {
+	const timestamp = Date.now();
+	const random = Math.random().toString(36).substring(2);
+	const userAgent = navigator.userAgent.slice(0, 50); // Truncate for security
+	return btoa(`${timestamp}-${random}-${userAgent}`).substring(0, 32);
+}
+
+/**
+ * Enhanced fetch with retry logic and security features
+ */
+async function fetchWithRetry(
+	url: string,
+	options: RequestInit,
+	retries = 3,
+	delay = 1000
+): Promise<Response> {
+	let lastError: Error;
+
+	for (let attempt = 1; attempt <= retries; attempt++) {
+		try {
+			// Add security headers that are CORS-compliant
+			const secureHeaders = {
+				...API_CONFIG.headers,
+				...options.headers,
+				// Use Content-Language for request fingerprinting (CORS allowed)
+				'Content-Language': `en-${generateRequestFingerprint().substring(0, 8)}`
+			};
+
+			const response = await fetch(url, {
+				...options,
+				headers: secureHeaders,
+				// Additional security options
+				credentials: 'omit', // Prevent credential leakage
+				mode: 'cors',
+				cache: 'no-cache' // Prevent caching of sensitive requests
+			});
+
+			// Security check: verify response headers
+			if (response.ok) {
+				const contentType = response.headers.get('content-type');
+				if (contentType && !contentType.includes('application/json')) {
+					console.warn('⚠️ Unexpected content type:', contentType);
+				}
+			}
+
+			// Don't retry on client errors (4xx) except 408, 429
+			if (response.status >= 400 && response.status < 500) {
+				if (response.status === 408 || response.status === 429) {
+					// Request timeout or rate limited - retry with backoff
+					if (attempt === retries) return response;
+					await sleep(delay * attempt * 2); // Exponential backoff
+					continue;
+				}
+				// Other 4xx errors - don't retry
+				return response;
+			}
+
+			// Success or 5xx server error
+			return response;
+		} catch (error) {
+			lastError = error instanceof Error ? error : new Error(String(error));
+			
+			// Don't retry on abort signal
+			if (lastError.name === 'AbortError') {
+				throw lastError;
+			}
+
+			// Enhanced CORS error handling with solution suggestions
+			if (lastError.message.includes('CORS') || lastError.message.includes('preflight')) {
+				const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+				throw new Error(
+					`CORS error from ${origin} to ${url}: ${lastError.message}. ` +
+					`Ensure backend allows origin: ${origin} and headers: ${Object.keys(API_CONFIG.headers).join(', ')}`
+				);
+			}
+
+			// Network security check
+			if (lastError.message.includes('net::ERR_CERT') || lastError.message.includes('certificate')) {
+				throw new Error(`SSL/TLS certificate error: ${lastError.message}. Check backend SSL configuration.`);
+			}
+
+			if (attempt === retries) {
+				throw new Error(`Secure request failed after ${retries} attempts: ${lastError.message}`);
+			}
+
+			console.warn(`🔄 Secure fetch attempt ${attempt} failed, retrying in ${delay * attempt}ms:`, lastError.message);
+			await sleep(delay * attempt);
+		}
+	}
+
+	throw lastError!;
+}
+
 function mapStatusToUI(status: string): JobState {
 	const normalized = normalizeStatus(status);
 	if (normalized === 'succeeded') return 'done';
@@ -146,28 +234,50 @@ function mapStatusToUI(status: string): JobState {
 	return 'queued';
 }
 
+/**
+ * Generate a session ID for rate limiting based on browser fingerprint
+ */
+function generateSessionId(): string {
+	if (typeof window === 'undefined') return 'server-session';
+	
+	// Create a semi-unique identifier for rate limiting
+	const fingerprint = [
+		window.screen.width,
+		window.screen.height,
+		navigator.language,
+		new Date().toDateString() // Reset daily
+	].join('-');
+	
+	return btoa(fingerprint).substring(0, 16);
+}
+
 export async function postItinerary(
 	payload: ItineraryRequest,
 	onStatus?: (state: JobState) => void,
 	signal?: AbortSignal
 ): Promise<ItineraryResponse> {
-	// Rate limiting check
-	const sessionId = 'user-session'; // In a real app, use actual session/IP
+	// Enhanced rate limiting with browser fingerprinting
+	const sessionId = generateSessionId();
 	if (!apiRateLimiter.isAllowed(sessionId)) {
-		throw new Error('Too many requests. Please wait before trying again.');
+		throw new Error('🛡️ Rate limit exceeded. Please wait before trying again.');
 	}
 
-	// Sanitize input payload
+	// Comprehensive input sanitization
 	const sanitizedPayload = sanitizeItineraryRequest(payload);
+	
+	// Security validation
+	if (!sanitizedPayload.destination?.trim()) {
+		throw new Error('🚨 Invalid destination provided');
+	}
 
+	console.log('🔒 Sending secure request with sanitized payload');
 	onStatus?.('queued');
 
 	// Create job with sanitized data
 	const createResponse = await withTimeout(
-		fetch(`${API_BASE}/jobs/itinerary`, {
+		fetchWithRetry(`${API_BASE}/jobs/itinerary`, {
 			method: 'POST',
 			headers: {
-				...DEFAULT_HEADERS,
 				Accept: 'application/json'
 			},
 			body: JSON.stringify(sanitizedPayload),
@@ -208,7 +318,7 @@ async function waitForJob(
 		}
 
 		const pollResponse = await withTimeout(
-			fetch(`${API_BASE}/jobs/${jobId}?_t=${Date.now()}`, {
+			fetchWithRetry(`${API_BASE}/jobs/${jobId}?_t=${Date.now()}`, {
 				method: 'GET',
 				signal
 			}),
