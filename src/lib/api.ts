@@ -40,7 +40,7 @@ async function emergencyFetch(url: string, options: RequestInit): Promise<Respon
 	
 	console.log('🆘 Emergency fetch to:', url);
 	return fetch(url, safeOptions);
-}"
+}
 
 /**
  * Validate API URL to prevent SSRF attacks
